@@ -5,7 +5,9 @@ VisualStudioVersion = 17.6.33815.320
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PoliceAPI_Client", "PoliceAPI_Client.csproj", "{2241F645-0C87-4073-A220-4FA3BDEE0CAF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PoliceAPI_Client.ConsoleTest", "..\PoliceAPI_Client.ConsoleTest\PoliceAPI_Client.ConsoleTest.csproj", "{725B1B6C-2CF4-40FB-8B4F-D77BE62F7E20}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PoliceAPI_Client.ConsoleTest", "..\PoliceAPI_Client.ConsoleTest\PoliceAPI_Client.ConsoleTest.csproj", "{725B1B6C-2CF4-40FB-8B4F-D77BE62F7E20}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestMap", "..\TestMap\TestMap.csproj", "{490986DA-B883-4C56-8A0B-7E360B18B690}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,12 @@ Global
 		{725B1B6C-2CF4-40FB-8B4F-D77BE62F7E20}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{725B1B6C-2CF4-40FB-8B4F-D77BE62F7E20}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{725B1B6C-2CF4-40FB-8B4F-D77BE62F7E20}.Release|Any CPU.Build.0 = Release|Any CPU
+		{490986DA-B883-4C56-8A0B-7E360B18B690}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{490986DA-B883-4C56-8A0B-7E360B18B690}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{490986DA-B883-4C56-8A0B-7E360B18B690}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{490986DA-B883-4C56-8A0B-7E360B18B690}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{490986DA-B883-4C56-8A0B-7E360B18B690}.Release|Any CPU.Build.0 = Release|Any CPU
+		{490986DA-B883-4C56-8A0B-7E360B18B690}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

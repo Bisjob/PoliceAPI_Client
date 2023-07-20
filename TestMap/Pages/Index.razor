@@ -1,0 +1,205 @@
+﻿@page "/"
+@using System.Globalization;
+@inject IJSRuntime jsRuntime
+@inject ICrimeService crimeService
+
+<div style="height:100vh;width:100vw;position:relative">
+    <LeafletMap Map="map" />
+
+    <div style="display:flex;flex-direction:column;position:absolute;top:2px;left:2px;background-color:rgba(0,0,0,0.5);color:white;z-index: 1000;border-radius:10px;">
+        <button class="btn btn-primary" @onclick="LoadCrimes">Load crimes</button>
+        @crimes?.Count() crimes laoaded
+        <br />
+        <div class="d-flex ml-2 mt-2">
+            <label class="mr-2">Radius </label>
+            <input type="range" @bind-value="heatRadius" min="5" max="100" class="w-100" />
+        </div>
+
+        <div class="d-flex ml-2">
+            <label class="mr-2">Opacity </label>
+            <input type="range" @bind-value="heatOpacity" min="0" max="255" class="w-100" />
+        </div>
+
+        <div class="d-flex flex-column mt-4">
+            @foreach (var g in heatCat)
+            {
+                <button class="btn @(g.Key == selectedCategory ? "btn-primary" : "btn-secondary") " @onclick="@(() => SetCategory(g.Key))">@g.Key</button>
+            }
+        </div>
+    </div>
+
+
+
+</div>
+
+@if (loading)
+{
+    <div class="full-screen-loader">
+        <div class="spinner"></div>
+    </div>
+}
+
+@code {
+    Map map;
+    bool mapInitialized = false;
+    bool loading = false;
+
+    IEnumerable<StreetLevelCrime> crimes;
+
+    HeatLayer heat = new HeatLayer();
+    Dictionary<string, HeatLayer> heatCat = new Dictionary<string, HeatLayer>();
+    string selectedCategory;
+
+    Random rdn = new();
+    Dictionary<string, string> crimeColors = new();
+
+    int heatRadius
+    {
+        get => heat.Radius;
+        set
+        {
+            heat.Radius = value;
+            map.UpdateHeatOptions(heat);
+        }
+    }
+
+    int heatOpacity
+    {
+        get => heat.Opacity;
+        set
+        {
+            heat.Opacity = value;
+            map.UpdateHeatOptions(heat);
+        }
+    }
+
+    protected override Task OnInitializedAsync()
+    {
+        map = new Map(jsRuntime)
+        {
+            Center = new LatLng(51.5074f, 0.1278f),
+			Zoom = 13f,
+			ZoomControl = false,
+		};
+
+
+        map.OnInitialized += async () =>
+        {
+            map.AddLayer(new TileLayer
+			{
+				UrlTemplate = "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+				Attribution = "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors",
+			});
+
+            mapInitialized = true;
+        };
+
+        return base.OnInitializedAsync();
+    }
+
+    private async Task LoadCrimes()
+    {
+        //map.RemoveLayer(heat);
+        map.ClearMarkers();
+        foreach (var val in heatCat.Values)
+            map.RemoveLayer(val);
+        heatCat.Clear();
+
+        loading = true;
+        StateHasChanged();
+        var bounds = await map.GetBounds();
+
+        var Polygon = new PoliceAPI_Client.Models.Polygon(new Coordinate[]
+        {
+            new Coordinate(bounds._northEast.Lat, bounds._northEast.Lng),
+            new Coordinate(bounds._northEast.Lat, bounds._southWest.Lng),
+            new Coordinate(bounds._southWest.Lat, bounds._southWest.Lng),
+            new Coordinate(bounds._southWest.Lat, bounds._northEast.Lng),
+        });
+        string date = DateTime.Now.AddMonths(-6).ToString("yyyy-MM");
+
+        List<LatLng> lst = new();
+        crimes = await crimeService.GetStreetLevelCrimes(Polygon, date);
+        if (crimes?.Any() == true)
+        {
+            var groups = crimes.GroupBy(c => c.category);
+            foreach (var g in groups)
+            {
+                List<LatLng> glst = new();
+                foreach (var crime in g)
+                {
+                    if (!float.TryParse(crime.location.latitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lat) ||
+                        !float.TryParse(crime.location.longitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lng))
+                        continue;
+                    var latlng = new LatLng()
+                    {
+                        Lat = lat,
+                        Lng = lng,
+                        Alt = 1
+                    };
+                    glst.Add(latlng);
+                }
+
+                HeatLayer gheat = new HeatLayer()
+                    {
+                        LatLongs = glst.ToArray()
+                    };
+                heatCat.Add(g.Key, gheat);
+            }
+            //foreach (var crime in crimes)
+            //{
+            //    if (!float.TryParse(crime.location.latitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lat) ||
+            //        !float.TryParse(crime.location.longitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lng))
+            //        continue;
+            //    var marker = new Marker(lat, lng)
+            //        {
+            //            //ClusterID = 1
+            //            Icon = new()
+            //            {
+            //                IsIconDiv = true,
+            //                HTML = $"<span class=\"map-icon-circle\" style={GetCrimeStyle(crime)}></span>"
+            //            },
+            //            Tooltip = new()
+            //            {
+            //                Content = $"{crime.category}",
+            //            }
+            //    };
+
+            //    map.AddMarker(marker);
+
+            //    //var latlng = new LatLng()
+            //    //    {
+            //    //        Lat = lat,
+            //    //        Lng = lng,
+            //    //        Alt = 1
+            //    //    };
+            //    //lst.Add(latlng);
+            //}
+            ////heat.LatLongs = lst.ToArray();
+            ////map.AddLayer(heat);
+        }
+        loading = false;
+    }
+
+
+    private string GetCrimeStyle(StreetLevelCrime crime)
+    {
+        if (crimeColors.TryGetValue(crime.category, out string res))
+            return $"background-color:{res};";
+
+        string hexColor = String.Format("#{0:X6}", rdn.Next(0x1000000));
+        crimeColors[crime.category] = hexColor;
+        return $"background-color:{hexColor};";
+    }
+
+    private void SetCategory(string cat)
+    {
+        if (!string.IsNullOrEmpty(selectedCategory) && heatCat.TryGetValue(selectedCategory, out HeatLayer l))
+            map.RemoveLayer(l);
+
+        selectedCategory = cat;
+
+        if (heatCat.TryGetValue(selectedCategory, out HeatLayer l1))
+            map.AddLayer(l1);
+    }
+}
