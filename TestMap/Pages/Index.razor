@@ -9,23 +9,43 @@
     <div style="display:flex;flex-direction:column;position:absolute;top:2px;left:2px;background-color:rgba(0,0,0,0.5);color:white;z-index: 1000;border-radius:10px;">
         <button class="btn btn-primary" @onclick="LoadCrimes">Load crimes</button>
         @crimes?.Count() crimes laoaded
-        <br />
+        
+
         <div class="d-flex ml-2 mt-2">
-            <label class="mr-2">Radius </label>
-            <input type="range" @bind-value="heatRadius" min="5" max="100" class="w-100" />
+            <label class="switch">
+                <input type="checkbox" @bind-value=@displayHeat>
+                <span class="slider round">Heat</span>
+            </label>
         </div>
 
-        <div class="d-flex ml-2">
-            <label class="mr-2">Opacity </label>
-            <input type="range" @bind-value="heatOpacity" min="0" max="255" class="w-100" />
-        </div>
+        @if (displayHeat)
+        {
+            <div class="d-flex ml-2 mt-2">
+                <label class="mr-2">Radius </label>
+                <input type="range" @bind-value="heatRadius" min="5" max="100" class="w-100" />
+            </div>
 
-        <div class="d-flex flex-column mt-4">
-            @foreach (var g in heatCat)
-            {
-                <button class="btn @(g.Key == selectedCategory ? "btn-primary" : "btn-secondary") " @onclick="@(() => SetCategory(g.Key))">@g.Key</button>
-            }
-        </div>
+            <div class="d-flex ml-2">
+                <label class="mr-2">Opacity </label>
+                <input type="range" @bind-value="heatOpacity" min="0" max="255" class="w-100" />
+            </div>
+
+            <div class="d-flex flex-column mt-4">
+                @foreach (var g in heatCat)
+                {
+                    <button class="btn @(g.Key == selectedHeatCategory ? "btn-primary" : "btn-secondary") " @onclick="@(() => SetHeatCategory(g.Key))">@g.Key</button>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column mt-4">
+                @foreach (var g in crimeColors)
+                {
+                    <button class="btn @(selectedCategories.Contains(g.Key) ? "btn-primary" : "btn-secondary") " @onclick="@(() => ToggleCategory(g.Key))">@g.Key</button>
+                }
+            </div>
+        }
     </div>
 
 
@@ -46,32 +66,41 @@
 
     IEnumerable<StreetLevelCrime> crimes;
 
-    HeatLayer heat = new HeatLayer();
     Dictionary<string, HeatLayer> heatCat = new Dictionary<string, HeatLayer>();
-    string selectedCategory;
+    string selectedHeatCategory;
 
     Random rdn = new();
     Dictionary<string, string> crimeColors = new();
+    List<string> selectedCategories = new();
+    Dictionary<string, IEnumerable<Marker>> markers = new();
 
     int heatRadius
     {
-        get => heat.Radius;
+        get => (heatCat.Values.FirstOrDefault()?.Radius).GetValueOrDefault();
         set
         {
-            heat.Radius = value;
-            map.UpdateHeatOptions(heat);
+            foreach (var h in heatCat.Values)
+            {
+                h.Radius = value;
+                map.UpdateHeatOptions(h);
+            }
         }
     }
 
     int heatOpacity
     {
-        get => heat.Opacity;
+        get => (heatCat.Values.FirstOrDefault()?.Opacity).GetValueOrDefault();
         set
         {
-            heat.Opacity = value;
-            map.UpdateHeatOptions(heat);
+            foreach (var h in heatCat.Values)
+            {
+                h.Opacity = value;
+                map.UpdateHeatOptions(h);
+            }
         }
     }
+
+    bool displayHeat = false;
 
     protected override Task OnInitializedAsync()
     {
@@ -99,11 +128,14 @@
 
     private async Task LoadCrimes()
     {
-        //map.RemoveLayer(heat);
         map.ClearMarkers();
         foreach (var val in heatCat.Values)
             map.RemoveLayer(val);
         heatCat.Clear();
+        markers.Clear();
+        selectedHeatCategory = string.Empty;
+        selectedCategories.Clear();
+
 
         loading = true;
         StateHasChanged();
@@ -126,6 +158,7 @@
             foreach (var g in groups)
             {
                 List<LatLng> glst = new();
+                List<Marker> gmarker = new();
                 foreach (var crime in g)
                 {
                     if (!float.TryParse(crime.location.latitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lat) ||
@@ -138,6 +171,21 @@
                         Alt = 1
                     };
                     glst.Add(latlng);
+
+                    var marker = new Marker(lat, lng)
+                        {
+                            //ClusterID = 1
+                            Icon = new()
+                            {
+                                IsIconDiv = true,
+                                HTML = $"<span class=\"map-icon-circle\" style={GetCrimeStyle(crime)}></span>"
+                            },
+                            Tooltip = new()
+                            {
+                                Content = $"{crime.category}",
+                            }
+                        };
+                    gmarker.Add(marker);
                 }
 
                 HeatLayer gheat = new HeatLayer()
@@ -145,38 +193,8 @@
                         LatLongs = glst.ToArray()
                     };
                 heatCat.Add(g.Key, gheat);
+                markers.Add(g.Key, gmarker);
             }
-            //foreach (var crime in crimes)
-            //{
-            //    if (!float.TryParse(crime.location.latitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lat) ||
-            //        !float.TryParse(crime.location.longitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lng))
-            //        continue;
-            //    var marker = new Marker(lat, lng)
-            //        {
-            //            //ClusterID = 1
-            //            Icon = new()
-            //            {
-            //                IsIconDiv = true,
-            //                HTML = $"<span class=\"map-icon-circle\" style={GetCrimeStyle(crime)}></span>"
-            //            },
-            //            Tooltip = new()
-            //            {
-            //                Content = $"{crime.category}",
-            //            }
-            //    };
-
-            //    map.AddMarker(marker);
-
-            //    //var latlng = new LatLng()
-            //    //    {
-            //    //        Lat = lat,
-            //    //        Lng = lng,
-            //    //        Alt = 1
-            //    //    };
-            //    //lst.Add(latlng);
-            //}
-            ////heat.LatLongs = lst.ToArray();
-            ////map.AddLayer(heat);
         }
         loading = false;
     }
@@ -192,14 +210,36 @@
         return $"background-color:{hexColor};";
     }
 
-    private void SetCategory(string cat)
+    private void SetHeatCategory(string cat)
     {
-        if (!string.IsNullOrEmpty(selectedCategory) && heatCat.TryGetValue(selectedCategory, out HeatLayer l))
+        if (!string.IsNullOrEmpty(selectedHeatCategory) && heatCat.TryGetValue(selectedHeatCategory, out HeatLayer l))
             map.RemoveLayer(l);
 
-        selectedCategory = cat;
+        selectedHeatCategory = cat;
 
-        if (heatCat.TryGetValue(selectedCategory, out HeatLayer l1))
+        if (heatCat.TryGetValue(selectedHeatCategory, out HeatLayer l1))
             map.AddLayer(l1);
+    }
+
+    private void ToggleCategory(string cat)
+    {
+        if (selectedCategories.Contains(cat))
+        {
+            if (markers.TryGetValue(cat, out var selMarkers))
+            {
+                foreach (var m in selMarkers)
+                    map.RemoveMarker(m);
+            }
+            selectedCategories.Remove(cat);
+        }
+        else
+        {
+            if (markers.TryGetValue(cat, out var selMarkers))
+            {
+                foreach (var m in selMarkers)
+                    map.AddMarker(m);
+            }
+            selectedCategories.Add(cat);
+        }
     }
 }
