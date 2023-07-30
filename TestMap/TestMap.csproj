@@ -57,8 +57,4 @@
       <ProjectReference Include="..\PoliceAPI_Client\PoliceAPI_Client.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Data\" />
-    </ItemGroup>
-
 </Project>

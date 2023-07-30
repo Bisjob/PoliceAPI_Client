@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -42,10 +44,16 @@ namespace PoliceAPI_Client.Common
                     string json = await response.Content.ReadAsStringAsync();
                     return JsonConvert.DeserializeObject<List<T>>(json ?? string.Empty);
                 }
-                catch (HttpRequestException ex)
+                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.ServiceUnavailable)
                 {
                     Console.WriteLine($"Error: {ex.Message}");
                     return null;
+                }
+                catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    Console.WriteLine($"Error: {ex.Message}");
+                    await Task.Delay(1000);
+                    return await GetList<T>(url);
                 }
             }
         }

@@ -1,5 +1,8 @@
 ﻿@page "/"
 @using System.Globalization;
+@using System.Text.RegularExpressions;
+@using System.Text.Json;
+@using TestMap.Data;
 @inject IJSRuntime jsRuntime
 @inject ICrimeService crimeService
 
@@ -141,19 +144,38 @@
         StateHasChanged();
         var bounds = await map.GetBounds();
 
-        var Polygon = new PoliceAPI_Client.Models.Polygon(new Coordinate[]
-        {
-            new Coordinate(bounds._northEast.Lat, bounds._northEast.Lng),
-            new Coordinate(bounds._northEast.Lat, bounds._southWest.Lng),
-            new Coordinate(bounds._southWest.Lat, bounds._southWest.Lng),
-            new Coordinate(bounds._southWest.Lat, bounds._northEast.Lng),
-        });
         string date = DateTime.Now.AddMonths(-6).ToString("yyyy-MM");
-
-        List<LatLng> lst = new();
-        crimes = await crimeService.GetStreetLevelCrimes(Polygon, date);
+        crimes = await QuadtreeDecompositionCrimes(bounds, date);
         if (crimes?.Any() == true)
         {
+            var lst = crimes.Select(c =>
+                {
+                    var dt = GetDate(c.month);
+                    if (dt == null) return null;
+                    if (!float.TryParse(c.location.latitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lat) ||
+                        !float.TryParse(c.location.longitude, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out float lng))
+                        return null;
+                    return new Crime()
+                    {
+                        Id = c.id,
+                        Category = c.category,
+                        Coordinates = new Coordinates(lat, lng),
+                        Date = dt.Value
+                    };
+                }).Where(x => x != null).ToList();
+
+            var opt = new JsonSerializerOptions()
+            {
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                IgnoreReadOnlyProperties = true,
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault,
+            };
+
+            var json = JsonSerializer.Serialize(lst, opt);
+            File.AppendAllText($"D:\\tmp\\crimes-{DateTime.Now:yyyy-MM-dd.HH-mm-ss}.json", json);
+
+
             var groups = crimes.GroupBy(c => c.category);
             foreach (var g in groups)
             {
@@ -199,6 +221,66 @@
         loading = false;
     }
 
+    private DateTime? GetDate(string date)
+    {
+        var m = Regex.Match(date, @"(?<year>\d{4})-(?<month>\d{2})");
+        if (!m.Success)
+            return null;
+
+        var year = m.Result("${year}");
+        var month = m.Result("${month}");
+        return new DateTime(int.Parse(year), int.Parse(month), 1);
+    }
+
+    private async Task<IEnumerable<StreetLevelCrime>> QuadtreeDecompositionCrimes(LatLngBounds bounds, string date)
+    {
+        var polygon = new PoliceAPI_Client.Models.Polygon(new Coordinate[]
+        {
+            new Coordinate(bounds._northEast.Lat, bounds._northEast.Lng),
+            new Coordinate(bounds._northEast.Lat, bounds._southWest.Lng),
+            new Coordinate(bounds._southWest.Lat, bounds._southWest.Lng),
+            new Coordinate(bounds._southWest.Lat, bounds._northEast.Lng),
+        });
+        crimes = await crimeService.GetStreetLevelCrimes(polygon, date);
+        if (crimes != null) return crimes;
+
+        if (CalculateDistance(bounds._northEast, bounds._southWest) < 1000)
+            return Array.Empty<StreetLevelCrime>();
+
+        var midLat = (bounds._southWest.Lat + bounds._northEast.Lat) / 2;
+        var midLon = (bounds._southWest.Lng + bounds._northEast.Lng) / 2;
+
+        var bounds1 = new LatLngBounds()
+            {
+                _northEast = new LatLng(bounds._northEast.Lat, bounds._northEast.Lng),
+                _southWest = new LatLng(midLat, midLon)
+            };
+        var bounds2 = new LatLngBounds()
+            {
+                _northEast = new LatLng(midLat, bounds._northEast.Lng),
+                _southWest = new LatLng(bounds._southWest.Lat, midLon)
+            };
+        var bounds3 = new LatLngBounds()
+            {
+                _northEast = new LatLng(midLat, midLon),
+                _southWest = new LatLng(bounds._southWest.Lat, bounds._southWest.Lng)
+            };
+        var bounds4 = new LatLngBounds()
+            {
+                _northEast = new LatLng(bounds._northEast.Lat, midLon),
+                _southWest = new LatLng(midLat, bounds._southWest.Lng)
+            };
+
+
+        List<StreetLevelCrime> results = new();
+        results.AddRange(await QuadtreeDecompositionCrimes(bounds1, date));
+        results.AddRange(await QuadtreeDecompositionCrimes(bounds2, date));
+        results.AddRange(await QuadtreeDecompositionCrimes(bounds3, date));
+        results.AddRange(await QuadtreeDecompositionCrimes(bounds4, date));
+
+        return results;
+    }
+
 
     private string GetCrimeStyle(StreetLevelCrime crime)
     {
@@ -241,5 +323,27 @@
             }
             selectedCategories.Add(cat);
         }
+    }
+
+    private static double CalculateDistance(LatLng point1, LatLng point2)
+    {
+        var R = 6371e3; // Earth's radius in meters
+        var lat1Rad = ToRadians(point1.Lat);
+        var lat2Rad = ToRadians(point2.Lat);
+        var deltaLat = ToRadians(point2.Lat - point1.Lat);
+        var deltaLon = ToRadians(point2.Lng - point1.Lng);
+
+        var a = Math.Sin(deltaLat / 2) * Math.Sin(deltaLat / 2) +
+                Math.Cos(lat1Rad) * Math.Cos(lat2Rad) *
+                Math.Sin(deltaLon / 2) * Math.Sin(deltaLon / 2);
+
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+
+        return R * c; // Distance in meters
+    }
+
+    private static double ToRadians(double angle)
+    {
+        return Math.PI * angle / 180.0;
     }
 }
